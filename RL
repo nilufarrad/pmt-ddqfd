@@ -1,0 +1,29 @@
+class ReinforcementResponsibilityRating:
+    def __init__(self):
+        self.u_i = 0  # Initial responsibility rating
+        self.w_i = 0  # Increment counter
+        self.f_i = 0  # Decrement counter
+        self.K_avg = 0  # Average transmission latency
+    
+    def update_rating(self, delay):
+        # Implement the reinforcement responsibility rating as in Eq. (5)-(8)
+        # Update w_i and f_i based on delay comparison with K_avg
+        if delay > self.K_avg:
+            self.w_i += 1
+            self.f_i = 0
+            new_u_i = min(MAX_RATING, self.u_i + self.w_i)
+        else:
+            self.f_i += 1
+            self.w_i = 0
+            new_u_i = max(0, self.u_i - self.f_i)
+        
+        # Update average transmission latency
+        self.K_avg = self.K_avg + (1/t) * (delay - self.K_avg)
+        
+        self.u_i = new_u_i
+        return self.u_i
+    
+    def get_power_level(self):
+        # Map responsibility rating to power level using Eq. (9)
+        power_index = int((self.u_i / MAX_RATING) * (len(POWER_LEVELS) - 1))
+        return POWER_LEVELS[power_index]
