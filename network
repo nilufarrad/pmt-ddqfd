@@ -1,0 +1,36 @@
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
+import tensorflow as tf  # For deep learning
+from collections import deque
+import random
+
+# Network parameters
+AREA_SIZE = 1000  # 1000m x 1000m
+NUM_EXPERT_SUS = 20
+NUM_NEW_SUS = 5
+NUM_PU_CHANNELS = 10
+POWER_LEVELS = np.linspace(100, 600, 50)  # 50 power levels from 100mW to 600mW
+
+# Physical layer parameters
+BANDWIDTH_RANGE = [1, 2]  # MHz
+AWGN_POWER = 1e-7  # mW
+PU_INTERFERENCE_RANGE = [1e-7, 1e-6]  # mW
+PACKET_SIZE = 10  # KB
+PU_DEPARTURE_RATE_MEAN = 0.1
+PU_DEPARTURE_RATE_DEV = 0.05
+SINR_THRESHOLD_RANGE = [-100, -80]  # dBm
+
+# Learning parameters
+DISCOUNT_FACTOR = 0.9
+LEARNING_RATE = 0.01
+TIME_SLOT = 10  # ms
+TEMPERATURE = 0.005
+SUPERVISED_LOSS_WEIGHT = 1
+L2_REG_WEIGHT = 1e-5
+PRE_TRAINING_STEPS = 800
+REPLAY_PERIOD = 300
+REPLAY_BUFFER_SIZE = 2000
+DEMO_BUFFER_SIZE = 2000
+DEMO_RATIO_INITIAL = 0.8
+DEMO_RATIO_FINAL = 0.05
