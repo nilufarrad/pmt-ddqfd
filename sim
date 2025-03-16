@@ -1,0 +1,55 @@
+class Simulator:
+    def __init__(self):
+        self.env = NetworkEnvironment()
+        self.env.create_network()
+        
+    def run_simulation(self):
+        # For each newly-joined SU:
+        for apprentice in self.env.new_sus:
+            # 1. Identify expert nodes using adaptive radius Bregman Ball
+            bregman_model = BregmanBallModel(REFERENCE_RADIUS)
+            experts, radius = bregman_model.identify_experts(apprentice, self.env.expert_sus)
+            
+            # 2. Initialize MT-DQfD agent
+            state_size = 3  # [e_i^t, u_i^t, f_i^t]
+            action_size = len(apprentice.neighbors) * NUM_PU_CHANNELS  # [n_j, c_i]
+            agent = MTDQfD(state_size, action_size)
+            
+            # 3. Collect demonstrations from experts
+            agent.collect_demonstrations(experts, apprentice)
+            
+            # 4. Pre-training phase
+            agent.pre_training()
+            
+            # 5. Self-learning phase
+            for episode in range(NUM_EPISODES):
+                state = self.env.reset()
+                done = False
+                
+                while not done:
+                    # Select action using policy derived from Q
+                    action = agent.get_action(state)
+                    
+                    # Execute action
+                    next_state, reward, done = self.env.step(action)
+                    
+                    # Store transition in self buffer
+                    agent.self_buffer.append((state, action, reward, next_state, done))
+                    
+                    # Update state
+                    state = next_state
+                    
+                    # Perform experience replay
+                    agent.train()
+                
+                # Update demonstration ratio
+                agent.update_demo_ratio()
+            
+            # 6. Evaluate performance
+            self.evaluate_performance(apprentice, agent)
+    
+    def evaluate_performance(self, su, agent):
+        # Measure performance metrics:
+        # - Transmission latency
+        # - Power consumption ratio
+        # - Packet loss ratio
