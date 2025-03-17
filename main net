@@ -97,11 +97,9 @@ class PMTDDQFDAgent:
         }
     
     def compute_n_step_returns(self, states, actions, rewards, next_states, dones, n=3):
-        # This is a placeholder - actual implementation would depend on how you store trajectories
-        # You would need to have stored n-step experiences
-        # For simplicity, I'm using a single-step approach here
+        # using a 1-step approach 
         gamma_n = self.gamma ** n
         next_actions = self.q_network(next_states).argmax(dim=1)
-        next_q_values = self.target_network(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+        next_q_values = self.target_network(next_states).gather(, next_actions.unsqueeze(1)).squeeze(1)
         n_step_returns = rewards + (1 - dones) * gamma_n * next_q_values
         return n_step_returns
