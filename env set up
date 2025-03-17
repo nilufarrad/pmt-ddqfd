@@ -23,9 +23,8 @@ class NetworkEnvironment:
             self.graph.add_node(new_su)
         
         # Connect nodes within transmission range
-        # (This would depend on your transmission range model)
     
     def calculate_link_gain(self, su1, su2):
         # Implement link gain model: g = G(r/r₀)^m for r > r₀
         distance = np.sqrt((su1.x - su2.x)**2 + (su1.y - su2.y)**2)
-        # Calculate and return gain based on the paper's formula
+        # Calculate and return gain 
