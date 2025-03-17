@@ -1,61 +1,107 @@
-class MTDQfD:
-    def __init__(self, state_size, action_size):
-        self.state_size = state_size
-        self.action_size = action_size
+class PMTDDQFDAgent:
+    def __init__(self, env, demonstration_data=None):
+        # Initialize networks, hyperparameters, etc.
+        # ...
         
-        # Create Q-networks
-        self.q_network = self.build_q_network()
-        self.target_network = self.build_q_network()
+        # Replace standard replay buffer with prioritized version
+        self.memory = PrioritizedReplayBuffer(capacity=100000)
         
-        # Create replay buffers
-        self.demo_buffer = deque(maxlen=DEMO_BUFFER_SIZE)
-        self.self_buffer = deque(maxlen=REPLAY_BUFFER_SIZE)
-        
-        # Set initial demonstration ratio
-        self.demo_ratio = DEMO_RATIO_INITIAL
+        # Load demonstration data if provided
+        if demonstration_data:
+            self.load_demonstrations(demonstration_data)
     
-    def build_q_network(self):
-        # Build a deep neural network for Q-function approximation
-        # This would be your neural network architecture
+    def update_model(self, batch):
+        states, actions, rewards, next_states, dones, indices, weights = batch
         
-    def collect_demonstrations(self, experts, apprentice):
-        # Collect demonstrations from multiple experts based on similarity
-        for expert in experts:
-            # Calculate similarity using Eq. (20)
-            similarity = self.calculate_similarity(expert, apprentice)
+        # Current Q-values
+        q_values = self.q_network(states)
+        current_q = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+        
+        # DDQN target calculation
+        next_q_values = self.q_network(next_states)
+        next_actions = next_q_values.argmax(dim=1)
+        next_q_target = self.target_network(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+        
+        # Standard 1-step target
+        target = rewards + (1 - dones) * self.gamma * next_q_target
+        
+        # N-step returns (implement according to your trajectory storage)
+        n_step_returns = self.compute_n_step_returns(states, actions, rewards, next_states, dones)
+        
+        # Combined target (1-step + n-step)
+        final_target = 0.5 * target + 0.5 * n_step_returns
+        
+        # TD error for updating priorities
+        td_errors = (final_target - current_q).detach()
+        
+        # Q-learning loss with importance sampling
+        q_loss = (weights * (td_errors ** 2)).mean()
+        
+        # Large margin classification loss for demonstrations
+        margin_loss = 0
+        if hasattr(self, 'demo_states') and len(self.demo_states) > 0:
+            # Sample demonstration batch
+            demo_indices = np.random.choice(len(self.demo_states), min(len(self.demo_states), 32))
+            demo_states = self.demo_states[demo_indices]
+            demo_actions = self.demo_actions[demo_indices]
             
-            # Determine number of demonstrations to collect from this expert
-            num_demos = int(similarity * DEMO_BUFFER_SIZE)
+            # Get Q-values for demonstrations
+            demo_q_values = self.q_network(demo_states)
             
-            # Collect high-quality demonstrations
-            demos = expert.get_high_quality_demos(num_demos)
-            self.demo_buffer.extend(demos)
-    
-    def pre_training(self):
-        # Pre-train the Q-network using demonstration data
-        for step in range(PRE_TRAINING_STEPS):
-            # Sample mini-batch from demo buffer
-            mini_batch = random.sample(self.demo_buffer, BATCH_SIZE)
+            # Get Q-values for demonstration actions
+            demo_action_q_values = demo_q_values.gather(1, demo_actions.unsqueeze(1)).squeeze(1)
             
-            # Calculate loss using Eq. (23)
-            # Update network weights
-    
-    def update_demo_ratio(self):
-        # Update demonstration ratio as in Eq. (25)
-        if self.demo_ratio > DEMO_RATIO_FINAL:
-            self.demo_ratio -= DEMO_RATIO_DECREMENT
-        else:
-            self.demo_ratio = DEMO_RATIO_FINAL
-    
-    def train(self):
-        # Perform training with both demonstration and self-generated data
-        # Sample from both buffers based on demo_ratio
-        demo_samples = random.sample(self.demo_buffer, 
-                                     int(BATCH_SIZE * self.demo_ratio))
-        self_samples = random.sample(self.self_buffer, 
-                                    BATCH_SIZE - len(demo_samples))
-        mini_batch = demo_samples + self_samples
+            # Calculate values for margin loss
+            margin = 0.8
+            demo_margin_values = demo_q_values.clone()
+            for i in range(len(demo_actions)):
+                demo_margin_values[i, demo_actions[i]] = -float('inf')
+            
+            # Max Q-values of non-demonstration actions
+            max_q_values = demo_margin_values.max(dim=1)[0]
+            
+            # Large margin classification loss
+            margin_loss = torch.mean(torch.clamp(max_q_values + margin - demo_action_q_values, min=0))
         
-        # Calculate loss and update network
-        # For demo samples: apply Q-learning loss + supervised loss
-        # For self samples: apply only Q-learning loss
+        # L2 regularization
+        l2_loss = 0
+        for param in self.q_network.parameters():
+            l2_loss += torch.norm(param, 2)
+        l2_factor = 1e-5
+        
+        # Total loss
+        total_loss = q_loss + 0.5 * margin_loss + l2_factor * l2_loss
+        
+        # Optimize
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        # Optional gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), max_norm=10)
+        self.optimizer.step()
+        
+        # Update replay buffer priorities
+        self.memory.update_priorities(indices, abs(td_errors.cpu().numpy()) + 1e-6)
+        
+        # Update target network if needed
+        if self.steps_done % self.target_update == 0:
+            self.update_target_network()
+        
+        self.steps_done += 1
+        
+        return {
+            'loss': total_loss.item(),
+            'q_loss': q_loss.item(),
+            'margin_loss': margin_loss.item() if isinstance(margin_loss, torch.Tensor) else margin_loss,
+            'l2_loss': l2_loss.item(),
+            'mean_q': current_q.mean().item()
+        }
+    
+    def compute_n_step_returns(self, states, actions, rewards, next_states, dones, n=3):
+        # This is a placeholder - actual implementation would depend on how you store trajectories
+        # You would need to have stored n-step experiences
+        # For simplicity, I'm using a single-step approach here
+        gamma_n = self.gamma ** n
+        next_actions = self.q_network(next_states).argmax(dim=1)
+        next_q_values = self.target_network(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+        n_step_returns = rewards + (1 - dones) * gamma_n * next_q_values
+        return n_step_returns
