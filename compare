@@ -1,0 +1,59 @@
+def run_comparison_experiment(env_name, num_episodes=1000):
+    # Create environment
+    env = gym.make(env_name)
+    
+    # Create variants of your algorithm
+    agents = {
+        "DQN": PMTDDQFDAgent(env, use_ddqn=False, use_prioritized=False, use_n_step=False, use_margin=False),
+        "DDQN": PMTDDQFDAgent(env, use_ddqn=True, use_prioritized=False, use_n_step=False, use_margin=False),
+        "DDQN+PER": PMTDDQFDAgent(env, use_ddqn=True, use_prioritized=True, use_n_step=False, use_margin=False),
+        "DQfD": PMTDDQFDAgent(env, use_ddqn=False, use_prioritized=False, use_n_step=False, use_margin=True),
+        "PMT-DDQFD": PMTDDQFDAgent(env, use_ddqn=True, use_prioritized=True, use_n_step=True, use_margin=True)
+    }
+    
+    # Results dictionary
+    results = {}
+    
+    # Train and evaluate each agent
+    for name, agent in agents.items():
+        print(f"Training {name}...")
+        
+        episode_rewards = []
+        for episode in range(num_episodes):
+            state = env.reset()
+            total_reward = 0
+            done = False
+            
+            while not done:
+                action = agent.select_action(state)
+                next_state, reward, done, _ = env.step(action)
+                agent.store_transition(state, action, reward, next_state, done)
+                agent.train()
+                
+                state = next_state
+                total_reward += reward
+            
+            episode_rewards.append(total_reward)
+            
+            # Log progress
+            if episode % 10 == 0:
+                avg_reward = np.mean(episode_rewards[-10:])
+                print(f"Episode {episode}, Average Reward: {avg_reward:.2f}")
+        
+        results[name] = episode_rewards
+    
+    # Plot results
+    plt.figure(figsize=(12, 8))
+    for name, rewards in results.items():
+        # Smooth rewards for better visualization
+        smoothed_rewards = np.convolve(rewards, np.ones(10)/10, mode='valid')
+        plt.plot(smoothed_rewards, label=name)
+    
+    plt.xlabel('Episode')
+    plt.ylabel('Average Reward')
+    plt.title('Algorithm Comparison')
+    plt.legend()
+    plt.savefig('algorithm_comparison.png')
+    plt.show()
+    
+    return results
